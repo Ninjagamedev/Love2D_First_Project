@@ -1,4 +1,6 @@
 
+local anim8 = require 'lib/anim8'
+
 function love.load()
     --Categoria das colisões
     CATEGORY_PLAYER = 1
@@ -40,20 +42,55 @@ function love.load()
 
 
     --! Alterar todas as instancias de player para player
-    player = {}
-    player.scaleX = 0.2
-    player.scaleY = 0.2
-    player.image = love.graphics.newImage("player.png")
-    player.height = player.image:getHeight() * player.scaleY
-    player.width = player.image:getWidth() * player.scaleX
+    player = {
+        states = {
+            idle = false,
+            grounded = false,
+            moving = false,
+            jumping = false
+        }
+    }
+    player.scaleX = 2
+    player.scaleY = 2
+    --player.image = love.graphics.newImage("player.png")
+    --Importar a sprite sheet
+
+    --! VERIFICAR COMO RAIOS ISTO FUNCIONA EM TERMOS DA SPRITESHEETSSSSSSSSSSSSSSSSSSSS
+    player.spriteSheet = love.graphics.newImage('Sprites/running_dino.png')
+    player.widthV = 24
+    player.heightV = player.spriteSheet:getHeight() - 4
+    player.height = player.heightV * player.scaleX
+    player.width = player.widthV * player.scaleY
     player.body = love.physics.newBody(world, 650/2, 650/2, "dynamic")
     player.shape = love.physics.newRectangleShape(player.width, player.height)
     player.fixture = love.physics.newFixture(player.body, player.shape, 1) -- Um fixture é um objeto que liga uma forma a um corpo e pode ser usado para testar colisões.
-    player.fixture:setCategory(CATEGORY_PLAYER) -- Setar um nome para o jogador
+    player.fixture:setCategory(CATEGORY_PLAYER) -- Categoria para o jogador para tratar das colisões
     player.jumpBuffer = 0
     player.inBoosterRange = false
     player.currentBooster = nil
-    player.isOnGround = false
+    player.maxSpeed = 300
+    player.acceleration = 600
+
+
+    --Tamanho de cada frame na sprite sheet
+    spriteHeight = 24
+    spriteWidth = 24
+    player.grid = anim8.newGrid(spriteWidth, spriteHeight, player.spriteSheet:getWidth(), player.spriteSheet:getHeight())
+
+
+    player.animations = {}
+    player.animations.walk = anim8.newAnimation(player.grid('1-6', 1), 0.05)
+
+    -- Replace player stuff with player States, check love library to do that
+
+        --[[
+        List of stuff that will be replaced:
+            player.isOnGround
+            player.isOnAir
+            player.inBoosterRange
+            player.isJumping
+        ]]--
+
 
     boosters = {} -- Tabela de Boosters
 
@@ -119,9 +156,16 @@ function love.draw()
     love.graphics.setColor(1, 1, 1)
     love.graphics.print("Current FPS: "..tostring(love.timer.getFPS( )), 10, 10)
     --Desenha o circulo
-    love.graphics.setColor(0.76, 0.18, 0.05)
-    love.graphics.draw(player.image, player.body:getX(), player.body:getY(), player.body:getAngle(), player.scaleX, player.scaleY, player.image:getWidth()/2, player.image:getHeight()/2)
-    
+    love.graphics.setColor(1,1,1)
+    --love.graphics.draw(player.image, player.body:getX(), player.body:getY(), player.body:getAngle(), player.scaleX, player.scaleY, player.image:getWidth()/2, player.image:getHeight()/2)
+    --Tamanho do sprite
+    --local spriteWidth, spriteHeight = player.animations.walk:getDimensions()
+    --Calcular metade da distancia para centrar o sprite na hitbox
+
+    --Centrar o sprite quando desenhado
+    player.animations.walk:draw(player.spriteSheet, player.body:getX(), player.body:getY(), player.body:getAngle(), player.scaleX, player.scaleY, spriteWidth / 2, spriteHeight / 2)
+
+
     love.graphics.setColor(1, 0, 0) -- Set the color to red
     love.graphics.line(player.rayStartX, player.rayStartY, player.rayEndX, player.rayEndY)
 
@@ -144,6 +188,24 @@ function love.draw()
 
 end
 
+function drawDebugHitboxes()
+    --Calcular o tamanho da hitbox com o tamanho do sprite * a scale
+    local hitboxWidth = spriteWidth * player.scaleX
+    local hitboxHeight = spriteHeight * player.scaleY
+    --Como o sprite é colocado no canto superior esquerdo temos de o centrar dividindo por 2 tanto na altura como na largura
+    local halfWidth = hitboxWidth / 2
+    local halfHeight = hitboxHeight / 2
+    love.graphics.setColor(0,1,0)
+    --Hitbox do proprio sprite
+    love.graphics.rectangle("line", player.body:getX() - halfWidth, player.body:getY() - halfHeight, hitboxWidth, hitboxHeight)
+    love.graphics.setColor(0,0,1)
+    --Vamos buscar os pontos de onde está o shape ligado ao player que consequentemente está ligado ao body
+    local x1, y1, x2, y2, x3, y3, x4, y4 = player.body:getWorldPoints(player.shape:getPoints())
+    --Com todos os pontos criamos a hitbox que é a hitbox de colisão do player
+    love.graphics.polygon("line", x1, y1, x2, y2, x3, y3, x4, y4)
+end
+
+
 
 
 
@@ -159,11 +221,40 @@ function love.update(dt)
         -- Check if the player is grounded
         rayCastGround()
 
+        for state, isActive in pairs(player.states) do
+            if isActive then
+                print("Active state: " .. state)
+            end
+        end
+
         -- Update the player's position
         ControllerHandler(dt)
         if player.jumpBuffer ~= 0 then
             jump()
         end
+
+        player.animations.walk:update(dt)
+
+end
+
+
+function setState(state, value)
+    print ("STATE MUDADO")
+    if player.states[state] ~= nil then
+        player.states[state] = value
+    end
+end
+
+
+
+function checkState()
+    for state in pairs(player.states) do
+    if state == player.state then   
+        player.states[state] = true
+    else
+        player.states[state] = false
+    end
+    end
 end
 
 
@@ -229,6 +320,7 @@ function ControllerHandler(dt)
     end
 
     if not isMoving then
+
         movement("none")
     end
 
@@ -243,23 +335,23 @@ end
 
 
 function movement(key)
+    local maxSpeed = player.maxSpeed
+    local acceleration = player.acceleration
 
-    local maxSpeed = 300
-    local acceleration = 600
 
     local vx, vy = player.body:getLinearVelocity()
 
     if key == "d" and vx < maxSpeed then
         player.body:applyForce(acceleration, 0)
-        player.scaleX = 0.2
+        player.scaleX = 2
     end
 
     if key == "a" and vx > -maxSpeed then
         player.body:applyForce(-acceleration, 0)
-        player.scaleX = -0.2
+        player.scaleX = -2
     end 
 
-    if key == "none" then
+    if key == "none" and player.states.moving == true then
         --print("Not moving")
         local friction = GROUND_FRICTION
         if vx > 0 then
@@ -267,6 +359,14 @@ function movement(key)
         elseif vx < 0 then
             player.body:applyForce(friction, 0)
         end
+    end
+
+    if vx == 0 then
+        setState("moving", false)
+        setState("idle", true)
+    else
+        setState("moving", true)
+        setState("idle", false)
     end
 
     --print("Current Speed" .. vx)
@@ -289,7 +389,7 @@ function rayCastGround()
         end
         return 1 -- Continue the raycast
     end)
-    player.isOnGround = groundFound
+    setState("grounded", groundFound)
     player.rayStartX = rayStartX
     player.rayStartY = rayStartY
     player.rayEndX = rayEndX
@@ -315,7 +415,7 @@ end
 -- A função de salto funciona com um buffer que é dado um valor quando a tecla de salto é pressionada
 -- Se o jogador estiver no chão e o buffer for menor que um determinado valor, o jogador salta
 function jump()
-    if (player.isOnGround and love.timer.getTime() - player.jumpBuffer <= JUMP_BUFFER_TIME) then
+    if (player.states.grounded == true and love.timer.getTime() - player.jumpBuffer <= JUMP_BUFFER_TIME) then
         print ("Jumping!")
         local vx, vy = player.body:getLinearVelocity()
         local jumpSpeed = 200

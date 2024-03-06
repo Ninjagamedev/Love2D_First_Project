@@ -5,7 +5,11 @@ function love.load()
     --Categoria das colisões
     CATEGORY_PLAYER = 1
     CATEGORY_GROUND = 2
-    CATEGORY_BOOSTER_HITBOX = 3
+    CATEGORY_WALL = 3
+    CATEGORY_ROOF = 4
+    CATEGORY_BOOSTER_HITBOX = 5
+    CATEGORY_BALL = 6
+    CATEGORY_ENEMY = 7
 
     --Jump Buffer Time
     JUMP_BUFFER_TIME = 0.1
@@ -23,7 +27,7 @@ function love.load()
 
     --Criando chão
     objects.ground = {}
-    objects.ground.body = love.physics.newBody(world, 650/2, 600-50/2)
+    objects.ground.body = love.physics.newBody(world, 650/2, 650)
     objects.ground.shape = love.physics.newRectangleShape(650, 50)
     objects.ground.fixture = love.physics.newFixture(objects.ground.body, objects.ground.shape)
     objects.ground.fixture:setCategory(CATEGORY_GROUND)
@@ -31,15 +35,36 @@ function love.load()
     --objects.ground.fixture:setUserData("Ground") -- Setar um nome para o chão
 
     objects.wallLeft = {}
-    objects.wallLeft.body = love.physics.newBody(world, 50, 650/2)
+    objects.wallLeft.body = love.physics.newBody(world, 0, 650/2)
     objects.wallLeft.shape = love.physics.newRectangleShape(50, 650)
     objects.wallLeft.fixture = love.physics.newFixture(objects.wallLeft.body, objects.wallLeft.shape)
     objects.wallLeft.fixture:setCategory(CATEGORY_GROUND) -- Setar um nome para a parede esquerda
+
+    
+    objects.wallRight = {}
+    objects.wallRight.body = love.physics.newBody(world, 650, 650/2)
+    objects.wallRight.shape = love.physics.newRectangleShape(50, 650)
+    objects.wallRight.fixture = love.physics.newFixture(objects.wallRight.body, objects.wallRight.shape)
+    objects.wallRight.fixture:setCategory(CATEGORY_GROUND) -- Setar um nome para a parede esquerda
+
+    --Roof Creation
+    objects.roof = {}
+    objects.roof.body = love.physics.newBody(world, 650/2, 0)
+    objects.roof.shape = love.physics.newRectangleShape(650, 50)
+    objects.roof.fixture = love.physics.newFixture(objects.roof.body, objects.roof.shape)
+    objects.roof.fixture:setCategory(CATEGORY_ROOF)
+    objects.roof.fixture:setFriction(0) -- Faz com que a bola pare de deslizar
 
 
 
     Jumps = 0
 
+    game = {
+        states = {
+            menu = false,
+            playing = false
+        }
+    }
 
     --! Alterar todas as instancias de player para player
     player = {
@@ -62,6 +87,7 @@ function love.load()
     player.height = player.heightV * player.scaleX
     player.width = player.widthV * player.scaleY
     player.body = love.physics.newBody(world, 650/2, 650/2, "dynamic")
+    player.body:setFixedRotation(true)
     player.shape = love.physics.newRectangleShape(player.width, player.height)
     player.fixture = love.physics.newFixture(player.body, player.shape, 1) -- Um fixture é um objeto que liga uma forma a um corpo e pode ser usado para testar colisões.
     player.fixture:setCategory(CATEGORY_PLAYER) -- Categoria para o jogador para tratar das colisões
@@ -92,6 +118,35 @@ function love.load()
         ]]--
 
 
+    --! Enemy
+
+    enemy = {
+        hp = 50,
+        states = {
+            idle = false,
+            attacking = false,
+            damaged = false
+        }
+    }
+
+    enemy.height = 30
+    enemy.width = 50
+    enemy.body = love.physics.newBody(world, 500, 650/2)
+    enemy.shape = love.physics.newRectangleShape(enemy.width, enemy.height)
+    enemy.fixture = love.physics.newFixture(enemy.body, enemy.shape, 1) -- Um fixture é um objeto que liga uma forma a um corpo e pode ser usado para testar colisões.
+    enemy.fixture:setCategory(CATEGORY_ENEMY)
+
+
+    setUpSandboxMap()
+
+      --initial graphics setup
+  love.graphics.setBackgroundColor(0.41, 0.53, 0.97) --set the background color to a nice blue
+  love.window.setMode(650, 650) --set the window dimensions to 650 by 650 with no fullscreen, vsync on, and no antialiasing
+  world:setCallbacks(beginContact, endContact) -- Chamada de funções para colisões
+end
+
+function setUpSandboxMap()
+
     boosters = {} -- Tabela de Boosters
 
     table.insert(boosters, {
@@ -120,12 +175,16 @@ function love.load()
     
     --Criar uma bola
     objects.ball = {}
-    objects.ball.body = love.physics.newBody(world, 650/1.5, 650/1.5, "dynamic")
-    player.body:setFixedRotation(true)
+    objects.ball.body = love.physics.newBody(world, 650/2, 650/2, "dynamic")
     objects.ball.shape = love.physics.newCircleShape(20) --Bola com um raio de 20
     objects.ball.fixture = love.physics.newFixture(objects.ball.body, objects.ball.shape, 1) -- Um fixture é um objeto que liga uma forma a um corpo e pode ser usado para testar colisões.
-    objects.ball.fixture:setUserData("Ball") -- Setar um nome para a bola
-    objects.ball.fixture:setRestitution(0) -- Faz com que a bola seja elástica
+    --objects.ball.fixture:setUserData("Ball") -- Setar um nome para a bola
+    objects.ball.fixture:setCategory(CATEGORY_BALL)
+    objects.ball.fixture:setRestitution(1) -- Faz com que a bola seja elástica
+    objects.ball.body:setGravityScale(0) -- Gravidade?
+    objects.ball.fixture:setFriction(0)
+    objects.ball.fixture:setDensity(0.1)
+    
 
     world:setCallbacks(beginContact, endContact)
 
@@ -142,30 +201,27 @@ function love.load()
     objects.block2.fixture = love.physics.newFixture(objects.block2.body, objects.block2.shape, 0.1)
     objects.block2.fixture:setCategory(CATEGORY_GROUND) -- Setar um nome para o bloco
 
-      --initial graphics setup
-  love.graphics.setBackgroundColor(0.41, 0.53, 0.97) --set the background color to a nice blue
-  love.window.setMode(650, 650) --set the window dimensions to 650 by 650 with no fullscreen, vsync on, and no antialiasing
-  world:setCallbacks(beginContact, endContact) -- Chamada de funções para colisões
 end
 
 
-function love.draw()
+
+
+function drawSandboxMap()
+
     love.graphics.setColor(0.28, 0.63, 0.05)
     love.graphics.polygon("fill", objects.ground.body:getWorldPoints(objects.ground.shape:getPoints())) -- Desenha o chão
     love.graphics.polygon("fill", objects.wallLeft.body:getWorldPoints(objects.wallLeft.shape:getPoints())) -- Desenha a parede esquerda
+    love.graphics.polygon("fill", objects.wallRight.body:getWorldPoints(objects.wallRight.shape:getPoints())) -- Desenha a parede direita 
+    love.graphics.polygon("fill", objects.roof.body:getWorldPoints(objects.roof.shape:getPoints())) -- Desenha o teto
     love.graphics.setColor(1, 1, 1)
     love.graphics.print("Current FPS: "..tostring(love.timer.getFPS( )), 10, 10)
     --Desenha o circulo
-    love.graphics.setColor(1,1,1)
     --love.graphics.draw(player.image, player.body:getX(), player.body:getY(), player.body:getAngle(), player.scaleX, player.scaleY, player.image:getWidth()/2, player.image:getHeight()/2)
     --Tamanho do sprite
     --local spriteWidth, spriteHeight = player.animations.walk:getDimensions()
     --Calcular metade da distancia para centrar o sprite na hitbox
 
-    --Centrar o sprite quando desenhado
-    player.animations.walk:draw(player.spriteSheet, player.body:getX(), player.body:getY(), player.body:getAngle(), player.scaleX, player.scaleY, spriteWidth / 2, spriteHeight / 2)
-
-
+   
     love.graphics.setColor(1, 0, 0) -- Set the color to red
     love.graphics.line(player.rayStartX, player.rayStartY, player.rayEndX, player.rayEndY)
 
@@ -185,6 +241,20 @@ function love.draw()
     love.graphics.setColor(0.20, 0.20, 0.20) -- set the drawing color to grey for the blocks
     love.graphics.polygon("fill", objects.block1.body:getWorldPoints(objects.block1.shape:getPoints()))
     love.graphics.polygon("fill", objects.block2.body:getWorldPoints(objects.block2.shape:getPoints()))
+
+end
+
+
+
+
+function love.draw()
+    --Centrar o sprite quando desenhado
+    love.graphics.setColor(1,1,1)
+    player.animations.walk:draw(player.spriteSheet, player.body:getX(), player.body:getY(), player.body:getAngle(), player.scaleX, player.scaleY, spriteWidth / 2, spriteHeight / 2)
+    love.graphics.setColor(1,0,1)
+    love.graphics.polygon("fill", enemy.body:getWorldPoints(enemy.shape:getPoints())) -- Desenha o teto
+
+    drawSandboxMap()
 
 end
 
@@ -223,7 +293,7 @@ function love.update(dt)
 
         for state, isActive in pairs(player.states) do
             if isActive then
-                print("Active state: " .. state)
+                --print("Active state: " .. state)
             end
         end
 
@@ -235,11 +305,17 @@ function love.update(dt)
 
         player.animations.walk:update(dt)
 
+        if(enemy.states.damaged == true) then
+            enemyHit()
+            enemy.states.damaged = false
+        end
+
+
 end
 
 
 function setState(state, value)
-    print ("STATE MUDADO")
+    --print ("STATE MUDADO")
     if player.states[state] ~= nil then
         player.states[state] = value
     end
@@ -264,6 +340,21 @@ function isCollidingWithBooster(aData, bData, booster)
     return (aData == CATEGORY_PLAYER and bData == CATEGORY_BOOSTER_HITBOX) or (aData == CATEGORY_BOOSTER_HITBOX and bData == CATEGORY_PLAYER)
 end
 
+function isCollidingWithBall(aData, bData)
+    return (aData == CATEGORY_BALL and bData == CATEGORY_GROUND) or (aData == CATEGORY_GROUND and bData == CATEGORY_BALL)
+end
+
+function isCollidingWithEnemy(aData, bData)
+    return (aData == CATEGORY_BALL and bData == CATEGORY_ENEMY) or (aData == CATEGORY_ENEMY and bData == CATEGORY_BALL)
+end
+
+function enemyHit()
+    print(enemy.body:getPosition())
+    enemy.body:setPosition(math.random(50, 600), math.random(0, 400))
+    print(enemy.body:getPosition())
+end
+
+
 function beginContact(a, b, coll)
 
 
@@ -276,7 +367,7 @@ function beginContact(a, b, coll)
     --Verifica se o jogador está em contacto com um booster
     --Verificar se é um "BoosterHitbox" e um "Player" que estão em contacto
     if isCollidingWithBooster(objectACategory, objectBCategory) then
-        print("Player entered the large circle's area!")
+        --print("Player entered the large circle's area!")
         for i, booster in ipairs(boosters) do
             print("Checking booster " .. i)
             if objectAUserData == booster or objectBUserData == booster then
@@ -286,6 +377,16 @@ function beginContact(a, b, coll)
             end
         end
     end
+    if isCollidingWithBall(objectACategory, objectBCategory) then
+        print("BALLS")
+    end 
+    if isCollidingWithEnemy(objectACategory, objectBCategory) then
+        print("Enemy Damaged")
+        enemy.hp = enemy.hp - 5
+        print("CURRENT HP: " .. enemy.hp)
+        enemy.states.damaged = true
+    end
+
 end
 
 function endContact(a, b, coll)
@@ -438,7 +539,7 @@ function Boost()
     boostDirection.x = boostDirection.x / magnitude
     boostDirection.y = boostDirection.y / magnitude
     --Aplicar o boost
-    local boostSpeed = 300
+    local boostSpeed = 150
     player.body:applyLinearImpulse(boostDirection.x * boostSpeed, boostDirection.y * boostSpeed)
 
 end 
